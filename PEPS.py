@@ -22,7 +22,7 @@ def initParameters():
     'zeta':0.5,
     'ex': 0.2,
     'bdim': 10,
-    'batch':20,
+    'batch':40,
     'step':200,
     'initstep': 0.1,
     'translation invariance': 0,
@@ -164,9 +164,7 @@ def calDelta(S, A, para):
     return [[[evalTN(state, A, 1, i, j, para) for state in S] for j in range(cdim)] for i in range(rdim)]
 
 # The function that calculates monte carlo average
-def monEx(W, arg1, arg2=0):
-    #norm = sum(np.multiply(W, W))
-    norm = 1
+def monEx(W, norm, arg1, arg2=0):
     return sum([weight * arg1[i] for i, weight in enumerate(W)]) / norm  if not arg2 else sum([weight * arg1[i] * arg2[i] for i, weight in enumerate(W)]) / norm
 
 # THe main function that does the iterative updates to the tensors (return the full set of tensors)
@@ -201,11 +199,11 @@ def estimator(S, W, para):
 def calDeriv(W, DELTA, EST, para):
     rdim = para['rdim']
     cdim = para['cdim']
-    return [[2 * (monEx(W, DELTA[i][j], EST) - monEx(W, DELTA[i][j]) * monEx(W, EST)) for j in range(cdim)] for i in range(rdim)]
+    return [[2 * (monEx(W, norm, DELTA[i][j], EST) - monEx(W, norm, DELTA[i][j]) * monEx(W, norm, EST)) for j in range(cdim)] for i in range(rdim)]
 
 # The function that wraps the TN module functions that contract a particular TN for a 2D configuration
-def calEnergy(W, EST ):
-    return sum(reduce(np.multiply, [W, W, EST])) / sum(np.multiply(W, W))
+def calEnergy(W, EST, norm ):
+    return sum(reduce(np.multiply, [W, W, EST])) / norm
     
 # return the full set of weights W
 def calWeight(S, A, para):
@@ -225,13 +223,13 @@ if __name__ == '__main__':
     for step in range(para['step']):
         # calculates the W(S) for all S
         W = calWeight(S, A, para)
-
+        norm = sum(np.multiply(W, W))
         #print(W)
         # calculates E(S) for all S
         EST = estimator(S, W, para)
 
         # calculates the energy on each pass
-        currentenergy = calEnergy(W, EST)
+        currentenergy = calEnergy(W, EST, norm)
         
 
         # calculate the tensor derivatives
