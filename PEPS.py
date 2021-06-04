@@ -228,7 +228,7 @@ if __name__ == '__main__':
         #print(W)
         # calculates E(S) for all S
         EST = estimator(S, W, para)
-        print(EST)
+        #print(EST)
         # calculates the energy on each pass
         currentenergy = calEnergy(W, EST, norm)
         
