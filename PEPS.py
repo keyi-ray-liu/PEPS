@@ -24,7 +24,7 @@ def initParameters():
     'bdim': 10,
     'batch':40,
     'step':200,
-    'initstep': 0.1,
+    'initstep': 1,
     'translation invariance': 0,
     'Q': 0.95,
     'lo':-0.1,
@@ -125,7 +125,7 @@ def hamiltonian(A, para):
             for scol in range(cdim):
                 r = sqrt((srow - row)**2 + (scol - col)**2)
                 factor = [ 1 - ex if np.rint(r) == 1 else 1][0]
-                res += - int_ee * z * factor / ( r + zeta ) * A[srow][scol] * A[row][col]
+                res +=  int_ee * z * factor / ( r + zeta ) * A[srow][scol] * A[row][col]
         return res
 
 
@@ -179,9 +179,10 @@ def stepUpdate(S, A, EST, step, DERIV, para):
     newstep = initstep * np.power(Q, step)
 
     # random but well-bounded step length
-    p = np.random.rand(bdim, bdim, bdim, bdim)
+    def randomstep():
+        return np.random.rand(bdim, bdim, bdim, bdim)
 
-    return [[A[i][j] - p * newstep * np.sign(DERIV[i][j]) for j in range(cdim) ] for i in range(rdim)]
+    return [[A[i][j] - randomstep() * newstep * np.sign(DERIV[i][j]) for j in range(cdim) ] for i in range(rdim)]
 
 # The function that estimate the energy (return the full set of estimates)
 def estimator(S, W, para):
@@ -189,7 +190,7 @@ def estimator(S, W, para):
 
     
     # generate the energy expectation value
-    estimate = [sum([W[i] / W[j] * innerProduct(state, hamiltonian(sprime, para)) for i, s in enumerate(S) for j, sprime in enumerate(S)]) for i, state in enumerate(S)]
+    estimate = [sum([W[j] / W[i] * innerProduct(sprime, hamiltonian(state, para)) for j, sprime in enumerate(S)]) for i, state in enumerate(S)]
 
     # normalization
 
@@ -227,7 +228,7 @@ if __name__ == '__main__':
         #print(W)
         # calculates E(S) for all S
         EST = estimator(S, W, para)
-
+        print(EST)
         # calculates the energy on each pass
         currentenergy = calEnergy(W, EST, norm)
         
