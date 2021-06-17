@@ -13,8 +13,8 @@ from functools import reduce
 # intialize the parameters for the simulation
 def initParameters():
     para = {
-    'rdim' : 1,
-    'cdim' :12,
+    'rdim' : 3,
+    'cdim' :3,
     't': 1.0,
     'int_ee': 1,
     'int_ne': 1,
@@ -30,7 +30,7 @@ def initParameters():
     'lo':-0.1,
     'hi':0.1,
     'print':1,
-    'occupation':6}
+    'occupation':5}
     return para
 
 
