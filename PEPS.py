@@ -13,29 +13,46 @@ from functools import reduce
 # intialize the parameters for the simulation
 def initParameters():
     para = {
-    'rdim' : 3,
-    'cdim' :3,
+    'rdim' : 1,
+    'cdim' :12,
     't': 1.0,
     'int_ee': 1,
     'int_ne': 1,
     'z':1,
     'zeta':0.5,
     'ex': 0.2,
-    'bdim': 10,
+    'bdim': 9,
     'batch':40,
     'step':200,
     'initstep': 1,
     'translation invariance': 0,
-    'Q': 0.95,
+    'Q': 0.99,
     'lo':-0.1,
-    'hi':0.1}
+    'hi':0.1,
+    'print':1,
+    'occupation':6}
     return para
 
-# initialize the spin 
-def initSpin(rdim, cdim):
-    S =  np.rint(np.random.rand(rdim, cdim))
-    return S 
 
+# Flip a site with zero occupation 
+def generateposition(s, size):
+    pos = int(np.rint(np.random.rand(1)* 8)[0])
+    return pos if not s[pos] else generateposition(s, size)
+
+# initialize the spin 
+def initSpin(rdim, cdim, occ):
+    size = rdim * cdim
+    s = [0] * size
+
+    for _ in range(occ):
+        pos = generateposition(s, size)
+        s[pos] = 1
+
+    return s
+
+def kdelta(s1, s2):
+    return 1 if s1 == s2 else 0
+    
 # generates the initial tensors A0 and A1
 def initTensor(para):
     rdim, cdim, bdim, ti =  para['rdim'], para['cdim'], para['bdim'], para['translation invariance']
@@ -43,20 +60,24 @@ def initTensor(para):
     if ti:
         return [np.random.uniform(lo, hi, (bdim, bdim, bdim, bdim)).astype('float32'), np.random.uniform(lo, hi, (bdim, bdim, bdim, bdim)).astype('float32')]
     else:
-        return [[np.random.uniform(lo, hi, (bdim, bdim, bdim, bdim)).astype('float32') for _ in range(rdim)] for _ in range(cdim)]
+        return [[[np.random.uniform(lo, hi, (bdim, bdim, bdim, bdim)).astype('float32'), np.random.uniform(lo, hi, (bdim, bdim, bdim, bdim)).astype('float32')] for _ in range(cdim)] for _ in range(rdim)]
 
 # generate the sets of 2D spin configurations to be run through the Monte Carlo simulation
 def generateState(para):
     # set() makes sure the spin configurations are unique
-    rdim, cdim, batch = para['rdim'], para['cdim'], para['batch']
+    rdim, cdim, occ, batch = para['rdim'], para['cdim'], para['occupation'], para['batch']
     S = set()
-    for i in range(batch):
-        S.add(tuple(initSpin(rdim, cdim).flatten()))
+    while len(S) < batch:
+        S.add(tuple(initSpin(rdim, cdim, occ)))
 
     new = [0] * len(S)
     # write spin configurations to the resulting array
     for j, s in enumerate(S):
         new[j] = np.array(s).reshape((rdim, cdim))
+    
+    if para['print']:
+        print('States : {}'.format(new))
+
     return new
 
 # sets up the 2D TN using the tensornetwork module
@@ -72,7 +93,7 @@ def evalTN(s, A, skip, skiprow, skipcol, para):
     if ti:
         tns = [[tn.Node([A[0] if s[row][col] else A[1]][0]) for col in range(cdim)] for row in range(rdim)]
     else:
-        tns = [[tn.Node(A[row][col]) for col in range(cdim)] for row in range(rdim)]
+        tns = [[tn.Node([A[row][col][0] if s[row][col] else A[row][col][1]][0]) for col in range(cdim)] for row in range(rdim)]
 
     # now we draw the edges
 
@@ -100,7 +121,7 @@ def evalTN(s, A, skip, skiprow, skipcol, para):
 
 # the hamiltonian functions acts on the state on the right and return a new state.
 # the input parameters are passed externally
-def hamiltonian(A, para):
+def hamiltonian(s, para):
     rdim, cdim, t, int_ee, int_ne, z, zeta, ex = para['rdim'], para['cdim'], para['t'], para['int_ee'],para['int_ne'], para['z'], para['zeta'], para['ex']
     new = np.zeros((rdim, cdim))
 
@@ -117,7 +138,7 @@ def hamiltonian(A, para):
             NN += [(0, +1)]
 
         # sum the hopping terms
-        return sum([int(A[row + i][col + j]) ^ int(A[row][col]) for i, j in NN])
+        return sum([int(s[row + i][col + j]) ^ int(s[row][col]) for i, j in NN])
 
     def ee(row, col):  
         res = 0
@@ -125,7 +146,7 @@ def hamiltonian(A, para):
             for scol in range(cdim):
                 r = sqrt((srow - row)**2 + (scol - col)**2)
                 factor = [ 1 - ex if np.rint(r) == 1 else 1][0]
-                res +=  int_ee * z * factor / ( r + zeta ) * A[srow][scol] * A[row][col]
+                res +=  int_ee * z * factor / ( r + zeta ) * s[srow][scol] * s[row][col]
         return res
 
 
@@ -135,7 +156,7 @@ def hamiltonian(A, para):
         for srow in range(rdim):
             for scol in range(cdim):
                 r = sqrt((srow - row)**2 + (scol - col)**2)
-                res += - int_ne * z / ( r + zeta ) * A[srow][scol]
+                res += - int_ne * z / ( r + zeta ) * s[srow][scol]
         return res
 
     for row in range(rdim):
@@ -152,7 +173,7 @@ def hamiltonian(A, para):
     return new
 
 
-def innerProduct(A, B, C=1):
+def innerProduct(A, B):
     return np.sum(np.multiply(A, B))
 
 
@@ -161,7 +182,7 @@ def innerProduct(A, B, C=1):
 def calDelta(S, A, para):
     rdim = para['rdim']
     cdim = para['cdim']
-    return [[[evalTN(state, A, 1, i, j, para) for state in S] for j in range(cdim)] for i in range(rdim)]
+    return [[[[evalTN(state, A, 1, i, j, para) * kdelta(o, state[i][j]) for state in S] for o in (0, 1)] for j in range(cdim)] for i in range(rdim)]
 
 # The function that calculates monte carlo average
 def monEx(W, norm, arg1, arg2=0):
@@ -182,7 +203,7 @@ def stepUpdate(S, A, EST, step, DERIV, para):
     def randomstep():
         return np.random.rand(bdim, bdim, bdim, bdim)
 
-    return [[A[i][j] - randomstep() * newstep * np.sign(DERIV[i][j]) for j in range(cdim) ] for i in range(rdim)]
+    return [[[A[i][j][o] - randomstep() * newstep * np.sign(DERIV[i][j][o]) for o in (0, 1)] for j in range(cdim) ] for i in range(rdim)]
 
 # The function that estimate the energy (return the full set of estimates)
 def estimator(S, W, para):
@@ -193,22 +214,32 @@ def estimator(S, W, para):
     estimate = [sum([W[j] / W[i] * innerProduct(sprime, hamiltonian(state, para)) for j, sprime in enumerate(S)]) for i, state in enumerate(S)]
 
     # normalization
-
+    if para['print']:
+        print('estimator : {}'.format(estimate))
     return estimate
 
 # The function that calculates the tensor derivatives
 def calDeriv(W, DELTA, EST, para):
     rdim = para['rdim']
     cdim = para['cdim']
-    return [[2 * (monEx(W, norm, DELTA[i][j], EST) - monEx(W, norm, DELTA[i][j]) * monEx(W, norm, EST)) for j in range(cdim)] for i in range(rdim)]
+    return [[[2 * (monEx(W, norm, DELTA[i][j][o], EST) - monEx(W, norm, DELTA[i][j][o]) * monEx(W, norm, EST)) for o in (0, 1)] for j in range(cdim)] for i in range(rdim)]
 
 # The function that wraps the TN module functions that contract a particular TN for a 2D configuration
 def calEnergy(W, EST, norm ):
     return sum(reduce(np.multiply, [W, W, EST])) / norm
+
+def calNorm(W, para):
+    norm = sum(np.multiply(W, W))
     
+    if para['print']:
+        print('norm : {}'.format(norm))
+    return norm
+
 # return the full set of weights W
 def calWeight(S, A, para):
     W = [evalTN(state, A, 0, 0, 0, para) for state in S]
+    if para['print']:
+        print('Weights : {}'.format(W))
     return W
 
 if __name__ == '__main__':
@@ -222,13 +253,14 @@ if __name__ == '__main__':
     S = generateState(para)
 
     for step in range(para['step']):
+
         # calculates the W(S) for all S
         W = calWeight(S, A, para)
-        norm = sum(np.multiply(W, W))
-        #print(W)
+        norm = calNorm(W, para)
+
         # calculates E(S) for all S
         EST = estimator(S, W, para)
-        #print(EST)
+
         # calculates the energy on each pass
         currentenergy = calEnergy(W, EST, norm)
         
@@ -241,6 +273,7 @@ if __name__ == '__main__':
 
         # update the tensor A's
         A = stepUpdate(S, A, EST, step, DERIV, para)
+        
 
         #print result on each pass
         energy += [[step, currentenergy]]
@@ -251,7 +284,7 @@ if __name__ == '__main__':
 
         print('step: {}, energy :{}'.format(step, currentenergy))
         
-    print(energy)
+    print('energy is {}'.format(energy))
     #calEnergy(S, A, para)
     #S = initSpin(rdim, cdim)
     #print(hamiltonian(S, rdim, cdim, t, int_ee, int_ne, Z, zeta, ex))
