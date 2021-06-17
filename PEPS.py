@@ -22,14 +22,14 @@ def initParameters():
     'zeta':0.5,
     'ex': 0.2,
     'bdim': 9,
-    'batch':40,
+    'batch':50,
     'step':200,
     'initstep': 1,
     'translation invariance': 0,
     'Q': 0.99,
     'lo':-0.1,
     'hi':0.1,
-    'print':1,
+    'print':0,
     'occupation':5}
     return para
 
@@ -283,6 +283,9 @@ if __name__ == '__main__':
             print(W, EST, DELTA, DERIV)
 
         print('step: {}, energy :{}'.format(step, currentenergy))
+
+        with open('res', 'a') as f:
+            f.write( 'step: {}, energy :{} \n'.format(step, currentenergy))
         
     print('energy is {}'.format(energy))
     #calEnergy(S, A, para)
