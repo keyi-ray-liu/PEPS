@@ -22,7 +22,7 @@ def initParameters():
     'zeta':0.5,
     'ex': 0.2,
     'bdim': 9,
-    'batch':50,
+    'batch':126,
     'step':200,
     'initstep': 1,
     'translation invariance': 0,
@@ -30,7 +30,7 @@ def initParameters():
     'lo':-0.1,
     'hi':0.1,
     'print':0,
-    'occupation':5}
+    'occupation':4}
     return para
 
 
@@ -75,8 +75,8 @@ def generateState(para):
     for j, s in enumerate(S):
         new[j] = np.array(s).reshape((rdim, cdim))
     
-    if para['print']:
-        print('States : {}'.format(new))
+    #if para['print']:
+        #print('States : {}'.format(new))
 
     return new
 
@@ -135,18 +135,21 @@ def hamiltonian(s, para):
         if col:
             NN += [(0, -1)]
         if not col == cdim -1 :
-            NN += [(0, +1)]
+            NN += [(0, 1)]
 
         # sum the hopping terms
-        return sum([int(s[row + i][col + j]) ^ int(s[row][col]) for i, j in NN])
+        return -sum([int(s[row + i][col + j]) ^ int(s[row][col]) for i, j in NN])
 
     def ee(row, col):  
         res = 0
         for srow in range(rdim):
             for scol in range(cdim):
                 r = sqrt((srow - row)**2 + (scol - col)**2)
-                factor = [ 1 - ex if np.rint(r) == 1 else 1][0]
-                res +=  int_ee * z * factor / ( r + zeta ) * s[srow][scol] * s[row][col]
+                # check exchange condition
+                factor = [ 1 - ex if np.rint(r**2) == 1 else 1][0]
+                # remove self-interaction
+                if srow != row or scol != col:
+                    res +=  int_ee * z * factor / ( r + zeta ) * s[srow][scol] * s[row][col]
         return res
 
 
@@ -178,16 +181,6 @@ def innerProduct(A, B):
 
 
 
-# The function that calculates the tensor derivative: (return a single tensor based on input single state)
-def calDelta(S, A, para):
-    rdim = para['rdim']
-    cdim = para['cdim']
-    return [[[[evalTN(state, A, 1, i, j, para) * kdelta(o, state[i][j]) for state in S] for o in (0, 1)] for j in range(cdim)] for i in range(rdim)]
-
-# The function that calculates monte carlo average
-def monEx(W, norm, arg1, arg2=0):
-    return sum([weight * arg1[i] for i, weight in enumerate(W)]) / norm  if not arg2 else sum([weight * arg1[i] * arg2[i] for i, weight in enumerate(W)]) / norm
-
 # THe main function that does the iterative updates to the tensors (return the full set of tensors)
 def stepUpdate(S, A, EST, step, DERIV, para):
     rdim = para['rdim']
@@ -205,11 +198,16 @@ def stepUpdate(S, A, EST, step, DERIV, para):
 
     return [[[A[i][j][o] - randomstep() * newstep * np.sign(DERIV[i][j][o]) for o in (0, 1)] for j in range(cdim) ] for i in range(rdim)]
 
+# test function that calculates the raw energies
+
+def testenergy(S, para):
+    print('test diagonal energy')
+    print([innerProduct(state, hamiltonian(state, para)) for state in S])
+    
+
 # The function that estimate the energy (return the full set of estimates)
 def estimator(S, W, para):
-    # initialize the simulation parameters
 
-    
     # generate the energy expectation value
     estimate = [sum([W[j] / W[i] * innerProduct(sprime, hamiltonian(state, para)) for j, sprime in enumerate(S)]) for i, state in enumerate(S)]
 
@@ -218,11 +216,25 @@ def estimator(S, W, para):
         print('estimator : {}'.format(estimate))
     return estimate
 
+
+# The function that calculates monte carlo average
+def monEx(W, norm, arg1, arg2=0):
+    return sum([weight * arg1[i] for i, weight in enumerate(W)]) / norm  if not arg2 else sum([weight * arg1[i] * arg2[i] for i, weight in enumerate(W)]) / norm
+
+
+# The function that calculates the tensor derivative: (return a single tensor based on input single state)
+def calDelta(S, A, para):
+    rdim = para['rdim']
+    cdim = para['cdim']
+    return [[[[evalTN(state, A, 1, i, j, para) * kdelta(o, state[i][j]) for state in S] for o in (0, 1)] for j in range(cdim)] for i in range(rdim)]
+
+
 # The function that calculates the tensor derivatives
 def calDeriv(W, DELTA, EST, para):
     rdim = para['rdim']
     cdim = para['cdim']
     return [[[2 * (monEx(W, norm, DELTA[i][j][o], EST) - monEx(W, norm, DELTA[i][j][o]) * monEx(W, norm, EST)) for o in (0, 1)] for j in range(cdim)] for i in range(rdim)]
+
 
 # The function that wraps the TN module functions that contract a particular TN for a 2D configuration
 def calEnergy(W, EST, norm ):
@@ -251,6 +263,7 @@ if __name__ == '__main__':
     energy = []
     # Here we try using a randomly generated set of occupation configuration
     S = generateState(para)
+    testenergy(S, para)
 
     for step in range(para['step']):
 
@@ -282,10 +295,14 @@ if __name__ == '__main__':
         if para['batch'] < 5:
             print(W, EST, DELTA, DERIV)
 
-        print('step: {}, energy :{}'.format(step, currentenergy))
+        print('step: {}, energy: {}, norm: {}'.format(step, currentenergy, norm))
 
         with open('res', 'a') as f:
-            f.write( 'step: {}, energy :{} \n'.format(step, currentenergy))
+            f.write( 'step: {}, energy:{}, norm: {} \n'.format(step, currentenergy, norm))
+
+        with open('esimator', 'a') as fest:
+            fest.write('step {} \n'.format(step))
+            fest.write( ' estimator: {} \n'.format(EST))
         
     print('energy is {}'.format(energy))
     #calEnergy(S, A, para)
