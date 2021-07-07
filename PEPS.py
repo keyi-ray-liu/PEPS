@@ -4,6 +4,7 @@ from numpy.core import einsumfunc
 from numpy.core.defchararray import multiply
 import tensornetwork as tn
 from functools import reduce
+import copy
 
 
 # The preliminary TN simulation program I have for the small scale 2D system we have. 
@@ -16,9 +17,9 @@ def initParameters():
     'rdim' : 3,
     'cdim' :3,
     't': 1.0,
-    'int_ee': 1,
-    'int_ne': 1,
-    'z':1,
+    'int_ee': 1.0,
+    'int_ne': 1.0,
+    'z': 1,
     'zeta':0.5,
     'ex': 0.2,
     'bdim': 9,
@@ -30,7 +31,10 @@ def initParameters():
     'lo':-0.1,
     'hi':0.1,
     'print':0,
-    'occupation':4}
+    'occupation':4,
+
+    #L2 switch. If 0, euclidean norm. Else, manhattan norm.
+    'lsw':0}
     return para
 
 
@@ -122,29 +126,50 @@ def evalTN(s, A, skip, skiprow, skipcol, para):
 # the hamiltonian functions acts on the state on the right and return a new state.
 # the input parameters are passed externally
 def hamiltonian(s, para):
-    rdim, cdim, t, int_ee, int_ne, z, zeta, ex = para['rdim'], para['cdim'], para['t'], para['int_ee'],para['int_ne'], para['z'], para['zeta'], para['ex']
+    rdim, cdim, t, int_ee, int_ne, z, zeta, ex, lsw = para['rdim'], para['cdim'], para['t'], para['int_ee'],para['int_ne'], para['z'], para['zeta'], para['ex'], para['lsw']
     new = np.zeros((rdim, cdim))
+    allnewstates = [[], []]
+    allee, allne = 0, 0
 
     def checkHopping(row, col):
         # set up the NN matrix
-        NN = []
-        if row:
-            NN += [(-1, 0)]
-        if not row == rdim - 1:
-            NN += [(1, 0)]
-        if col:
-            NN += [(0, -1)]
-        if not col == cdim -1 :
-            NN += [(0, 1)]
+        res = []
+        
+        # hop up
+        # if row and s[row][col] != s[row - 1][col]:
+        #     snew = copy.copy(s) 
+        #     snew[row][col], snew[row - 1][col] = snew[row - 1][col], snew[row][col]
+        #     res.append(snew)
+
+        # hop down
+        if not row == rdim - 1 and s[row][col] != s[rdim -1][col]:
+            snew = copy.copy(s) 
+            snew[row][col], snew[ row + 1][col] = snew[row + 1 ][col], snew[row][col]
+            res.append(snew)
+
+        # # hop left
+        # if col and s[row][col] != s[row][col -1]:
+        #     snew = copy.copy(s) 
+        #     snew[row][col], snew[ row ][col -1] = snew[row  ][col - 1], snew[row][col]
+        #     res.append(snew)
+        
+        #hop right
+        if not col == cdim -1 and s[row][col] != s[row][col + 1]:
+            snew = copy.copy(s) 
+            snew[row][col], snew[ row ][col +1] = snew[row  ][col + 1], snew[row][col]
+            res.append(snew)
 
         # sum the hopping terms
-        return -sum([int(s[row + i][col + j]) ^ int(s[row][col]) for i, j in NN])
+        return res
 
     def ee(row, col):  
         res = 0
         for srow in range(rdim):
             for scol in range(cdim):
-                r = sqrt((srow - row)**2 + (scol - col)**2)
+                if not lsw:
+                    r = sqrt((srow - row)**2 + (scol - col)**2)
+                else:
+                    r = abs(srow - row) + abs(scol - col)
                 # check exchange condition
                 factor = [ 1 - ex if np.rint(r**2) == 1 else 1][0]
                 # remove self-interaction
@@ -158,7 +183,10 @@ def hamiltonian(s, para):
         # sum the contribution from all sites
         for srow in range(rdim):
             for scol in range(cdim):
-                r = sqrt((srow - row)**2 + (scol - col)**2)
+                if not lsw:
+                    r = sqrt((srow - row)**2 + (scol - col)**2)
+                else:
+                    r = abs(srow - row) + abs(scol - col)
                 res += - int_ne * z / ( r + zeta ) * s[srow][scol]
         return res
 
@@ -166,18 +194,30 @@ def hamiltonian(s, para):
         for col in range(cdim):
 
             # the hopping part
-            new [row][col] += t * checkHopping(row, col)
+            newstate =  checkHopping(row, col)
+            for state in newstate:
+                allnewstates[0].append(-t)
+                allnewstates[1].append(state)
+
 
             # the ee interaction part, the 0.5 is for the double counting of sites. 
-            new [row][col] += ee(row, col) * 0.5
+            allee += ee(row, col) * 0.5
             # the ne interaction part
 
-            new [row][col] += ne(row, col)
-    return new
+            allne += ne(row, col)
 
+    allnewstates[0].append(allee + allne)
 
+    allnewstates[1].append(s)
+
+    return allnewstates
+
+# B is the altered state
 def innerProduct(A, B):
-    return np.sum(np.multiply(A, B))
+    #print(B)
+    return sum([B[0][i] if np.array_equal(A, s) else 0 for i, s in enumerate(B[1]) ])
+
+
 
 
 
@@ -202,7 +242,7 @@ def stepUpdate(S, A, EST, step, DERIV, para):
 
 def testenergy(S, para):
     print('test diagonal energy')
-    print([innerProduct(state, hamiltonian(state, para)) for state in S])
+    print([[innerProduct(sprime, hamiltonian(state, para)) for state in S] for sprime in S] )
     
 
 # The function that estimate the energy (return the full set of estimates)
