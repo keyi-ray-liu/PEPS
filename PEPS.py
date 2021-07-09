@@ -133,6 +133,7 @@ def hamiltonian(s, para):
 
     def checkHopping(row, col):
         # set up the NN matrix
+        ts = []
         res = []
         
         # hop up
@@ -147,6 +148,11 @@ def hamiltonian(s, para):
             snew[row][col], snew[ row + 1][col] = snew[row + 1 ][col], snew[row][col]
             res.append(snew)
 
+            if (list(s[row][col + 1: ]) + list(s[row + 1][ : col] ) ).count(1) % 2:
+                ts.append(-t)
+            else:
+                ts.append(t)
+
         # # hop left
         # if col and s[row][col] != s[row][col -1]:
         #     snew = copy.copy(s) 
@@ -158,9 +164,10 @@ def hamiltonian(s, para):
             snew = copy.copy(s) 
             snew[row][col], snew[ row ][col +1] = snew[row  ][col + 1], snew[row][col]
             res.append(snew)
+            ts.append(-t)
 
         # sum the hopping terms
-        return res
+        return ts, res
 
     def ee(row, col):  
         res = 0
@@ -194,10 +201,10 @@ def hamiltonian(s, para):
         for col in range(cdim):
 
             # the hopping part
-            newstate =  checkHopping(row, col)
-            for state in newstate:
-                allnewstates[0].append(-t)
-                allnewstates[1].append(state)
+            ts, newstate =  checkHopping(row, col)
+            for i in range(len(ts)):
+                allnewstates[0].append(ts[i])
+                allnewstates[1].append(newstate[i])
 
 
             # the ee interaction part, the 0.5 is for the double counting of sites. 
