@@ -17,8 +17,8 @@ def initParameters():
     'rdim' : 3,
     'cdim' :3,
     't': 1.0,
-    'int_ee': 1.0,
-    'int_ne': 1.0,
+    'int_ee': 1,
+    'int_ne': 2,
     'z': 1,
     'zeta':0.5,
     'ex': 0.2,
@@ -149,9 +149,9 @@ def hamiltonian(s, para):
             res.append(snew)
 
             if (list(s[row][col + 1: ]) + list(s[row + 1][ : col] ) ).count(1) % 2:
-                ts.append(-t)
-            else:
                 ts.append(t)
+            else:
+                ts.append(-t)
 
         # # hop left
         # if col and s[row][col] != s[row][col -1]:
@@ -167,6 +167,7 @@ def hamiltonian(s, para):
             ts.append(-t)
 
         # sum the hopping terms
+        #print(ts)
         return ts, res
 
     def ee(row, col):  
@@ -194,8 +195,8 @@ def hamiltonian(s, para):
                     r = sqrt((srow - row)**2 + (scol - col)**2)
                 else:
                     r = abs(srow - row) + abs(scol - col)
-                res += - int_ne * z / ( r + zeta ) * s[srow][scol]
-        return res
+                res += - int_ne * z / ( r + zeta ) * s[row][col]
+        return res 
 
     for row in range(rdim):
         for col in range(cdim):
@@ -211,8 +212,11 @@ def hamiltonian(s, para):
             allee += ee(row, col) * 0.5
             # the ne interaction part
 
+            #print(ne(row, col))
             allne += ne(row, col)
 
+    #print(allee, allne)
+    print(allee, allne)
     allnewstates[0].append(allee + allne)
 
     allnewstates[1].append(s)
@@ -223,7 +227,7 @@ def hamiltonian(s, para):
 def innerProduct(A, B):
     #print(B)
     return sum([B[0][i] if np.array_equal(A, s) else 0 for i, s in enumerate(B[1]) ])
-
+    #return [B[0][i] if np.array_equal(A, s) else 0 for i, s in enumerate(B[1]) ]
 
 
 
@@ -249,8 +253,8 @@ def stepUpdate(S, A, EST, step, DERIV, para):
 
 def testenergy(S, para):
     print('test diagonal energy')
-    print([[innerProduct(sprime, hamiltonian(state, para)) for state in S] for sprime in S] )
-    
+    #print([[innerProduct(sprime, hamiltonian(state, para)) for state in S] for sprime in S] )
+    print([innerProduct(state, hamiltonian(state, para)) for state in S] )
 
 # The function that estimate the energy (return the full set of estimates)
 def estimator(S, W, para):
