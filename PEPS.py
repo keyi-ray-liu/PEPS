@@ -18,7 +18,7 @@ def initParameters():
     'cdim' :3,
     't': 1.0,
     'int_ee': 1,
-    'int_ne': 2,
+    'int_ne': 0,
     'z': 1,
     'zeta':0.5,
     'ex': 0.2,
@@ -216,7 +216,7 @@ def hamiltonian(s, para):
             allne += ne(row, col)
 
     #print(allee, allne)
-    print(allee, allne)
+
     allnewstates[0].append(allee + allne)
 
     allnewstates[1].append(s)
@@ -226,6 +226,7 @@ def hamiltonian(s, para):
 # B is the altered state
 def innerProduct(A, B):
     #print(B)
+    #print([B[0][i] if np.array_equal(A, s) else 0 for i, s in enumerate(B[1]) ])
     return sum([B[0][i] if np.array_equal(A, s) else 0 for i, s in enumerate(B[1]) ])
     #return [B[0][i] if np.array_equal(A, s) else 0 for i, s in enumerate(B[1]) ]
 
@@ -253,8 +254,9 @@ def stepUpdate(S, A, EST, step, DERIV, para):
 
 def testenergy(S, para):
     print('test diagonal energy')
+    print(sorted([hamiltonian(state, para)[0][-1] for state in S]))
     #print([[innerProduct(sprime, hamiltonian(state, para)) for state in S] for sprime in S] )
-    print([innerProduct(state, hamiltonian(state, para)) for state in S] )
+    #print([innerProduct(state, hamiltonian(state, para)) for state in S] )
 
 # The function that estimate the energy (return the full set of estimates)
 def estimator(S, W, para):
