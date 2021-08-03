@@ -18,11 +18,11 @@ def initParameters():
     'cdim' :3,
     't': 1.0,
     'int_ee': 1,
-    'int_ne': 0,
+    'int_ne': -1,
     'z': 1,
     'zeta':0.5,
     'ex': 0.2,
-    'bdim': 9,
+    'bdim': 12,
     'batch':126,
     'step':200,
     'initstep': 1,
@@ -34,7 +34,9 @@ def initParameters():
     'occupation':4,
 
     #L2 switch. If 0, euclidean norm. Else, manhattan norm.
-    'lsw':0}
+    'lsw':0,
+    # if-include-nuc-self-int switch, 1 means include
+    'selfnuc':0}
     return para
 
 
@@ -126,8 +128,8 @@ def evalTN(s, A, skip, skiprow, skipcol, para):
 # the hamiltonian functions acts on the state on the right and return a new state.
 # the input parameters are passed externally
 def hamiltonian(s, para):
-    rdim, cdim, t, int_ee, int_ne, z, zeta, ex, lsw = para['rdim'], para['cdim'], para['t'], para['int_ee'],para['int_ne'], para['z'], para['zeta'], para['ex'], para['lsw']
-    new = np.zeros((rdim, cdim))
+    rdim, cdim, t, int_ee, int_ne, z, zeta, ex, lsw, selfnuc = para['rdim'], para['cdim'], para['t'], para['int_ee'],para['int_ne'], para['z'], para['zeta'], para['ex'], para['lsw'], para['selfnuc']
+
     allnewstates = [[], []]
     allee, allne = 0, 0
 
@@ -143,7 +145,7 @@ def hamiltonian(s, para):
         #     res.append(snew)
 
         # hop down
-        if not row == rdim - 1 and s[row][col] != s[rdim -1][col]:
+        if not row == rdim - 1 and s[row][col] != s[row + 1][col]:
             snew = copy.copy(s) 
             snew[row][col], snew[ row + 1][col] = snew[row + 1 ][col], snew[row][col]
             res.append(snew)
@@ -195,8 +197,8 @@ def hamiltonian(s, para):
                     r = sqrt((srow - row)**2 + (scol - col)**2)
                 else:
                     r = abs(srow - row) + abs(scol - col)
-                res += - int_ne * z / ( r + zeta ) * s[row][col]
-        return res 
+                res +=  int_ne * z / ( r + zeta ) * s[row][col]
+        return res if selfnuc else res - int_ne * z / zeta * s[row][col]
 
     for row in range(rdim):
         for col in range(cdim):
@@ -252,9 +254,16 @@ def stepUpdate(S, A, EST, step, DERIV, para):
 
 # test function that calculates the raw energies
 
+def sorttestres(S, para):
+    ori = [[innerProduct(sprime, hamiltonian(state, para)) for state in S] for sprime in S]
+    comb = [res[2] for res in sorted([[ori[i][i], i, ori[i]] for i in range(len(ori))], key=lambda x:(x[0], x[1]))]
+    print([dict(zip(*np.unique(inp, return_counts=True))) for inp in comb])
+    np.savetxt('pepsout', comb)
+
 def testenergy(S, para):
     print('test diagonal energy')
-    print(sorted([hamiltonian(state, para)[0][-1] for state in S]))
+    #print(sorted([hamiltonian(state, para)[0][-1] for state in S]))
+    sorttestres(S, para)
     #print([[innerProduct(sprime, hamiltonian(state, para)) for state in S] for sprime in S] )
     #print([innerProduct(state, hamiltonian(state, para)) for state in S] )
 
