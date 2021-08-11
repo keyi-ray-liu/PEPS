@@ -14,16 +14,16 @@ import copy
 # intialize the parameters for the simulation
 def initParameters():
     para = {
-    'rdim' : 3,
-    'cdim' :3,
+    'rdim' : 1,
+    'cdim' :12,
     't': 1.0,
     'int_ee': 1,
     'int_ne': -1,
     'z': 1,
     'zeta':0.5,
     'ex': 0.2,
-    'bdim': 12,
-    'batch':126,
+    'bdim': 10,
+    'batch':924,
     'step':200,
     'initstep': 1,
     'translation invariance': 0,
@@ -31,7 +31,7 @@ def initParameters():
     'lo':-0.1,
     'hi':0.1,
     'print':0,
-    'occupation':4,
+    'occupation':6,
 
     #L2 switch. If 0, euclidean norm. Else, manhattan norm.
     'lsw':0,
@@ -42,7 +42,7 @@ def initParameters():
 
 # Flip a site with zero occupation 
 def generateposition(s, size):
-    pos = int(np.rint(np.random.rand(1)* 8)[0])
+    pos = int(np.rint(np.random.rand(1)* (size - 1))[0])
     return pos if not s[pos] else generateposition(s, size)
 
 # initialize the spin 
@@ -64,9 +64,15 @@ def initTensor(para):
     rdim, cdim, bdim, ti =  para['rdim'], para['cdim'], para['bdim'], para['translation invariance']
     lo, hi = para['lo'], para['hi']
     if ti:
-        return [np.random.uniform(lo, hi, (bdim, bdim, bdim, bdim)).astype('float32'), np.random.uniform(lo, hi, (bdim, bdim, bdim, bdim)).astype('float32')]
+        if rdim == 1:
+            return [np.random.uniform(lo, hi, (bdim, bdim)).astype('float32'), np.random.uniform(lo, hi, (bdim, bdim)).astype('float32')]
+        else:
+            return [np.random.uniform(lo, hi, (bdim, bdim, bdim, bdim)).astype('float32'), np.random.uniform(lo, hi, (bdim, bdim, bdim, bdim)).astype('float32')]
     else:
-        return [[[np.random.uniform(lo, hi, (bdim, bdim, bdim, bdim)).astype('float32'), np.random.uniform(lo, hi, (bdim, bdim, bdim, bdim)).astype('float32')] for _ in range(cdim)] for _ in range(rdim)]
+        if rdim == 1:
+            return [[[np.random.uniform(lo, hi, (bdim, bdim)).astype('float32'), np.random.uniform(lo, hi, (bdim, bdim)).astype('float32')] for _ in range(cdim)] for _ in range(rdim)]
+        else:
+            return [[[np.random.uniform(lo, hi, (bdim, bdim, bdim, bdim)).astype('float32'), np.random.uniform(lo, hi, (bdim, bdim, bdim, bdim)).astype('float32')] for _ in range(cdim)] for _ in range(rdim)]
 
 # generate the sets of 2D spin configurations to be run through the Monte Carlo simulation
 def generateState(para):
@@ -94,7 +100,12 @@ def evalTN(s, A, skip, skiprow, skipcol, para):
     ti = para['translation invariance']
 
     def setoutputorder():
-        return [tns[skiprow][skipcol -1][1], tns[skiprow][(skipcol + 1)% cdim][0], tns[skiprow -1][skipcol][3], tns[(skiprow +1)% rdim][skipcol][2] ]
+        if rdim == 1:
+            return [tns[skiprow][skipcol -1][1], tns[skiprow][(skipcol + 1)% cdim][0] ]
+        else:
+            return [tns[skiprow][skipcol -1][1], tns[skiprow][(skipcol + 1)% cdim][0], tns[skiprow -1][skipcol][3], tns[(skiprow +1)% rdim][skipcol][2] ]
+
+    # setup the TN nodes
 
     if ti:
         tns = [[tn.Node([A[0] if s[row][col] else A[1]][0]) for col in range(cdim)] for row in range(rdim)]
@@ -109,7 +120,8 @@ def evalTN(s, A, skip, skiprow, skipcol, para):
             # horizontal edges, [0] is left edge, [1] is right edge.
             tns[row][col - 1][1] ^ tns[row][col][0]
             # vertical edges, [2] is top edge, [3] is bottom edge
-            tns[row - 1][col][3] ^ tns[row][col][2]
+            if rdim > 1:
+                tns[row - 1][col][3] ^ tns[row][col][2]
     
     if skip:
         tn.remove_node(tns[skiprow][skipcol])
@@ -227,6 +239,7 @@ def hamiltonian(s, para):
 
 # B is the altered state
 def innerProduct(A, B):
+    #print(q * 924 + p)
     #print(B)
     #print([B[0][i] if np.array_equal(A, s) else 0 for i, s in enumerate(B[1]) ])
     return sum([B[0][i] if np.array_equal(A, s) else 0 for i, s in enumerate(B[1]) ])
@@ -255,7 +268,7 @@ def stepUpdate(S, A, EST, step, DERIV, para):
 # test function that calculates the raw energies
 
 def sorttestres(S, para):
-    ori = [[innerProduct(sprime, hamiltonian(state, para)) for state in S] for sprime in S]
+    ori = [[innerProduct(sprime, hamiltonian(state, para)) for i, state in enumerate(S)] for j, sprime in enumerate(S)]
     comb = [res[2] for res in sorted([[ori[i][i], i, ori[i]] for i in range(len(ori))], key=lambda x:(x[0], x[1]))]
     print([dict(zip(*np.unique(inp, return_counts=True))) for inp in comb])
     np.savetxt('pepsout', comb)
